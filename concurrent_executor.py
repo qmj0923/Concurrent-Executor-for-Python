@@ -45,7 +45,7 @@ class ConcurrentExecutor:
         # Since logging in a multiprocessing setup is not safe, using it in
         # self._worker() is not recommended. See the following link for more
         # details.
-        # https://stackoverflow.com/questions/1154446/is-file-append-atomic-in-unix
+        # https://stackoverflow.com/questions/47968861/does-python-logging-support-multiprocessing
         self.logger = logger
         
     def load(self, fname):
