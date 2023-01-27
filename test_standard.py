@@ -1,5 +1,5 @@
 import time
-from log import setup_custom_logger
+from util.log import setup_custom_logger
 from concurrent_executor import ConcurrentExecutor
 
 

@@ -7,7 +7,7 @@ import logging
 from tqdm import tqdm
 # from concurrent.futures import ThreadPoolExecutor as PoolExecutor
 from concurrent.futures import ProcessPoolExecutor as PoolExecutor
-from file_io import load_json, dump_json
+from util.file_io import load_json, dump_json
 
 
 class ConcurrentExecutor:
