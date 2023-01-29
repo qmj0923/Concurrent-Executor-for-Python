@@ -2,7 +2,11 @@
 
 Concurrently execute a function with a list of function inputs.
 
+## Features
 
+1. This framework can apply to any callable object.
+2. Checkpoints will be saved and loaded automatically.
+3. The real-time progress bar will be logged to `<output_dir>/_tmp/log_<i>.log`.
 
 ## Example
 
