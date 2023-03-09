@@ -1,13 +1,14 @@
 from __future__ import annotations
-import inspect
 import collections
+import inspect
+import json
+import logging
 import os
 import shutil
-import logging
-from tqdm import tqdm
+
 # from concurrent.futures import ThreadPoolExecutor as PoolExecutor
 from concurrent.futures import ProcessPoolExecutor as PoolExecutor
-from util.file_io import load_json, dump_json
+from tqdm import tqdm
 
 
 class ConcurrentExecutor:
@@ -49,10 +50,12 @@ class ConcurrentExecutor:
         self.logger = logger
         
     def load(self, fname):
-        return load_json(fname)
+        with open(fname, 'r', encoding='utf-8') as f:
+            return json.load(f)
     
     def dump(self, obj, fname):
-        dump_json(obj, fname)
+        with open(fname, 'w', encoding='utf-8') as f:
+            return json.dump(obj, f, ensure_ascii=False, indent=2)
 
     def encode_arguments(self, params: list) -> str:
         return ' | '.join([str(param) for param in params])
