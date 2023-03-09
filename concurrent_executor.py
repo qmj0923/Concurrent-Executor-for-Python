@@ -21,7 +21,7 @@ class ConcurrentExecutor:
     foo(4999) concurrently.
 
     ```
-    import time, logging
+    import time
     from concurrent_executor import ConcurrentExecutor
 
     def foo(x):
@@ -31,7 +31,7 @@ class ConcurrentExecutor:
         return x
 
     if __name__ == '__main__':
-        executor = ConcurrentExecutor(logging.getLogger())
+        executor = ConcurrentExecutor()
         result = executor.run(
             data=[[i] for i in range(5000)],
             func=foo,
@@ -42,12 +42,17 @@ class ConcurrentExecutor:
     See ConcurrentExecutor.run() for more details.
     '''
 
-    def __init__(self, logger: logging.Logger):
+    def __init__(self, logger: logging.Logger = None):
         # Since logging in a multiprocessing setup is not safe, using it in
         # self._worker() is not recommended. See the following link for more
         # details.
         # https://stackoverflow.com/questions/47968861/does-python-logging-support-multiprocessing
-        self.logger = logger
+        if logger is None:
+            self.logger = logging.getLogger()
+            self.logger.setLevel(logging.INFO)
+            self.logger.addHandler(logging.StreamHandler())  # Write to stdout.
+        else:
+            self.logger = logger
         
     def load(self, fname):
         with open(fname, 'r', encoding='utf-8') as f:

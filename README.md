@@ -13,7 +13,7 @@ Concurrently execute a function with a list of function inputs.
 Given a function foo(), our goal is to execute foo(0), foo(1), ..., foo(4999) concurrently.
 
 ```python
-import time, logging
+import time
 from concurrent_executor import ConcurrentExecutor
 
 def foo(x):
@@ -23,7 +23,7 @@ def foo(x):
     return x
 
 if __name__ == '__main__':
-    executor = ConcurrentExecutor(logging.getLogger())
+    executor = ConcurrentExecutor()
     result = executor.run(
         data=[[i] for i in range(5000)],
         func=foo,

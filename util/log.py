@@ -12,7 +12,7 @@ def setup_custom_logger(log_file_name):
     logger = logging.getLogger(log_file_name)
     logger.setLevel(logging.INFO)
     logger.addHandler(fileHandler)
-    logger.addHandler(logging.StreamHandler())  # Write to stdout as well
+    logger.addHandler(logging.StreamHandler())  # Write to stdout as well.
     time_ = time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())
     logger.info(f"Start logging: {time_}")
 
