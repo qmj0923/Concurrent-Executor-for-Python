@@ -101,8 +101,8 @@ class ConcurrentExecutor:
                 try:
                     response = func(**kwargs)
                 except Exception as e:
+                    response = None
                     errors.append(f'[{str(kwargs)}] {str(e)}')
-                    continue
                 result.append({**kwargs, **{'response': response}})
         self.dump(result, tmp_file)
         if errors:
@@ -201,6 +201,8 @@ class ConcurrentExecutor:
             ...
         }
         ```
+        In addition, The return value of `func` will be set to None if an
+        exception occurs.
         '''
         kwargs_data = self._convert_to_kwargs_data(data, func)
         total_len = len(kwargs_data)
