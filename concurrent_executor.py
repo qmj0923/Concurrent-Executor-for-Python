@@ -42,7 +42,20 @@ class ConcurrentExecutor:
     See ConcurrentExecutor.run() for more details.
     '''
 
-    def __init__(self, logger: logging.Logger = None):
+    def __init__(
+        self, logger: logging.Logger = None,
+        response_key='response', separator=' | '
+    ):
+        '''
+        Parameters
+        ----------
+        response_key: key of a dictionary that records the result of execution
+            Change if it confilcts with any parameter of the function that to
+            be executed. Otherwise the default value is recommended.
+
+        separator: string to join the input arguments of the function
+            Change if it confilcts with any possible argument.
+        '''
         # Since logging in a multiprocessing setup is not safe, using it in
         # self._worker() is not recommended. See the following link for more
         # details.
@@ -53,6 +66,8 @@ class ConcurrentExecutor:
             self.logger.addHandler(logging.StreamHandler())  # Write to stdout.
         else:
             self.logger = logger
+        self.response_key = response_key
+        self.separator = separator
         
     def load(self, fname):
         with open(fname, 'r', encoding='utf-8') as f:
@@ -63,10 +78,10 @@ class ConcurrentExecutor:
             return json.dump(obj, f, ensure_ascii=False, indent=2)
 
     def encode_arguments(self, params: list) -> str:
-        return ' | '.join([str(param) for param in params])
+        return self.separator.join([str(param) for param in params])
 
     def decode_arguments(self, key: str) -> list[str]:
-        return key.split(' | ')
+        return key.split(self.separator)
 
     def _convert_to_kwargs_data(
         self, data: list, func: function
@@ -90,23 +105,23 @@ class ConcurrentExecutor:
         self, kwargs_data: list[dict], func: function,
         seq: int, output_dir: str
     ):
-        tmp_file = os.path.join(output_dir, f'part_{seq}.json')
-        error_file = os.path.join(output_dir, f'error_{seq}.json')
-        log_file = os.path.join(output_dir, f'log_{seq}.log')
-        if os.path.exists(tmp_file):
+        part_fname = os.path.join(output_dir, f'part_{seq}.json')
+        error_fname = os.path.join(output_dir, f'error_{seq}.json')
+        log_fname = os.path.join(output_dir, f'log_{seq}.log')
+        if os.path.exists(part_fname):
             return
         result, errors = list(), list()
-        with open(log_file, 'w', encoding='utf-8') as f:
+        with open(log_fname, 'w', encoding='utf-8') as f:
             for kwargs in tqdm(kwargs_data, file=f):
                 try:
                     response = func(**kwargs)
                 except Exception as e:
                     response = None
-                    errors.append(f'[{str(kwargs)}] {str(e)}')
-                result.append({**kwargs, **{'response': response}})
-        self.dump(result, tmp_file)
+                    errors.append({'kwargs': kwargs, 'msg': str(e)})
+                result.append({**kwargs, **{self.response_key: response}})
+        self.dump(result, part_fname)
         if errors:
-            self.dump(errors, error_file)
+            self.dump(errors, error_fname)
 
     def _work_wrapper(self, kwargs: dict):
         return self._worker(**kwargs)
@@ -119,13 +134,13 @@ class ConcurrentExecutor:
                 '[Concurrent Executor] '
                 'return_format must be "list" or "dict".'
             )
-        segment_files = [
-            os.path.join(tmp_dir, file)
-            for file in os.listdir(tmp_dir)
-            if file.startswith('part_') and file.endswith('.json')
+        segment_list = [
+            os.path.join(tmp_dir, path)
+            for path in os.listdir(tmp_dir)
+            if path.startswith('part_') and path.endswith('.json')
         ]
         result = list()
-        for fname in segment_files:
+        for fname in segment_list:
             result += self.load(fname)
 
         if return_format == 'list':
@@ -138,22 +153,24 @@ class ConcurrentExecutor:
                     str(info_dict[param])
                     for param in sig.parameters.keys()
                     if param in info_dict
-                ]): info_dict['response']
+                ]): info_dict[self.response_key]
                 for info_dict in result
             }
         return result
     
     def _collate_error(self, tmp_dir: str) -> list[str]:
-        segment_files = [
-            os.path.join(tmp_dir, file)
-            for file in os.listdir(tmp_dir)
-            if file.startswith('error_') and file.endswith('.json')
+        segment_list = [
+            os.path.join(tmp_dir, path)
+            for path in os.listdir(tmp_dir)
+            if path.startswith('error_') and path.endswith('.json')
         ]
         errors = list()
-        for fname in segment_files:
+        for fname in segment_list:
             errors += self.load(fname)
-        for error in errors:
-            self.logger.error(error)
+        if errors:
+            for e in errors:
+                self.logger.error(f'[{str(e["kwargs"])}] {str(e["msg"])}')
+            self.dump(errors, os.path.join(tmp_dir, 'error.json'))
         return errors
 
     def run(
@@ -165,14 +182,14 @@ class ConcurrentExecutor:
         ----------
         func: function to be executed
 
-        data: list of the function inputs are already arranged into either
+        data: list of `func`'s inputs that are already arranged into either
         argument lists or keyword argument lists
 
         output_dir: the directory to save files
 
         return_format: the format of the return value
 
-        batch_size: the number of function inputs to be processed by each
+        batch_size: the number of `func`'s inputs to be processed by each
         worker at a time
 
         max_workers: the maximum number of workers that can be used
@@ -187,7 +204,7 @@ class ConcurrentExecutor:
                 param1: arg1,
                 param2: arg2,
                 ...
-                'response': func(arg1, arg2, ...),
+                self.response_key: func(arg1, arg2, ...),
             },
             ...
         ]
@@ -197,7 +214,7 @@ class ConcurrentExecutor:
         corresponding return values of `func`, as shown below.
         ```
         {
-            arg1 + ' | ' + arg2 + ' | ' + ...: func(arg1, arg2, ...),
+            arg1 + self.separator + arg2 + ...: func(arg1, arg2, ...),
             ...
         }
         ```
