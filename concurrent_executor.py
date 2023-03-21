@@ -127,7 +127,8 @@ class ConcurrentExecutor:
         return self._worker(**kwargs)
 
     def _collate_result(
-        self, func: function, tmp_dir: str, return_format: str
+        self, func: function, tmp_dir: str,
+        return_format: str, default_response
     ) -> list[dict] | dict:
         if return_format not in ['list', 'dict']:
             raise ValueError(
@@ -142,6 +143,9 @@ class ConcurrentExecutor:
         result = list()
         for fname in segment_list:
             result += self.load(fname)
+        for item in result:
+            if item[self.response_key] is None:
+                item[self.response_key] = default_response
 
         if return_format == 'list':
             pass
@@ -175,7 +179,8 @@ class ConcurrentExecutor:
 
     def run(
         self, data: list, func: function, output_dir: str,
-        return_format='list', batch_size=1000, max_workers=8
+        return_format='list', default_response=None,
+        batch_size=1000, max_workers=8
     ) -> list[dict] | dict:
         '''
         Parameters
@@ -188,6 +193,10 @@ class ConcurrentExecutor:
         output_dir: the directory to save files
 
         return_format: the format of the return value
+        
+        default_response: the default return value of `func`
+            If the return value of `func` is None, it will be set to
+            `default_response`.
 
         batch_size: the number of `func`'s inputs to be processed by each
         worker at a time
@@ -242,7 +251,9 @@ class ConcurrentExecutor:
                 } for i in range(iteration)]
             )
         self._collate_error(tmp_dir)
-        result = self._collate_result(func, tmp_dir, return_format)
+        result = self._collate_result(
+            func, tmp_dir, return_format, default_response
+        )
         # self.dump(result, os.path.join(output_dir, 'result.json'))
         # shutil.rmtree(tmp_dir)
         return result
