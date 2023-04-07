@@ -1,3 +1,9 @@
+'''
+Copyright (c) 2023 qmj0923
+
+https://github.com/qmj0923/Concurrent-Executor-for-Python
+'''
+
 from __future__ import annotations
 import collections
 import inspect
