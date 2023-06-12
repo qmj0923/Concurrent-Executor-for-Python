@@ -135,12 +135,14 @@ class ConcurrentExecutor:
     def _collate_result(
         self, func: function, tmp_dir: str,
         return_format: str, default_response
-    ) -> list[dict] | dict:
-        if return_format not in ['list', 'dict']:
+    ) -> list[dict] | dict | None:
+        if return_format not in ['list', 'dict', 'none']:
             raise ValueError(
                 '[Concurrent Executor] '
-                'return_format must be "list" or "dict".'
+                'Invalid return_format.'
             )
+        if return_format == 'none':
+            return None
         segment_list = [
             os.path.join(tmp_dir, path)
             for path in os.listdir(tmp_dir)
@@ -187,7 +189,7 @@ class ConcurrentExecutor:
         self, data: list, func: function, output_dir: str,
         return_format='list', default_response=None,
         batch_size=1000, max_workers=8
-    ) -> list[dict] | dict:
+    ) -> list[dict] | dict | None:
         '''
         Parameters
         ----------
@@ -211,6 +213,8 @@ class ConcurrentExecutor:
 
         Returns
         -------
+        Set `return_format` to 'none' if you don't want to return anything.
+        
         If `return_format` == 'list', the return value will be a list of
         dictionaries as follows.
         ```
@@ -233,8 +237,6 @@ class ConcurrentExecutor:
             ...
         }
         ```
-        In addition, The return value of `func` will be set to None if an
-        exception occurs.
         '''
         kwargs_data = self._convert_to_kwargs_data(data, func)
         total_len = len(kwargs_data)
