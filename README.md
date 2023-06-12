@@ -31,3 +31,18 @@ if __name__ == '__main__':
     )
 ```
 
+## Run the given examples
+
+Suppose that we will run `examples/test_standard.py`.
+
+```bash
+$ cd examples
+$ python test_standard.py
+```
+
+## Tips
+
+If you're concerned about the size of `<output_dir>/_tmp/`, consider the following suggestions:
+
+Check if the return value of your function is too large. If so, consider storing it to a file instead, as demonstrated in `examples/crawl.py`.
+Check if the input to your function is too large. If so, consider storing the input to a file and passing the file path to your function instead.
