@@ -245,6 +245,10 @@ class ConcurrentExecutor:
         os.makedirs(tmp_dir, exist_ok=True)
 
         self.logger.info(f'Executing "{func.__name__}" for {total_len} data.')
+        self.logger.info(
+            f'Data will be divided into {iteration} parts, with a maximum '
+            f'of {batch_size} item(s) in each part.'
+        )
         self.logger.info(f'Temporary files will be saved in {tmp_dir}.')
         self.logger.info('Start executing...')
         with PoolExecutor(max_workers=max_workers) as executor:
