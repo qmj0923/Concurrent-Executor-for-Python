@@ -7,14 +7,14 @@ https://github.com/qmj0923/Concurrent-Executor-for-Python
 from __future__ import annotations
 import collections
 import inspect
+import io
 import json
 import logging
 import os
 import shutil
 
-# from concurrent.futures import ThreadPoolExecutor as PoolExecutor
-from concurrent.futures import ProcessPoolExecutor as PoolExecutor
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map as tqdm_map
 
 
 class ConcurrentExecutor:
@@ -251,17 +251,19 @@ class ConcurrentExecutor:
         )
         self.logger.info(f'Temporary files will be saved in {tmp_dir}.')
         self.logger.info('Start executing...')
-        with PoolExecutor(max_workers=max_workers) as executor:
-            # Don't take lambda as the first argument of ProcessPoolExecutor.map().
-            executor.map(
-                self._work_wrapper,
-                [{
-                    'kwargs_data': kwargs_data[
-                        i * batch_size:(i + 1) * batch_size
-                    ],
-                    'func': func, 'seq': i, 'output_dir': tmp_dir,
-                } for i in range(iteration)]
-            )
+
+        tqdm_out = TqdmToLogger(self.logger)
+        tqdm_map(
+            self._work_wrapper,
+            [{
+                'kwargs_data': kwargs_data[
+                    i * batch_size:(i + 1) * batch_size
+                ],
+                'func': func, 'seq': i, 'output_dir': tmp_dir,
+            } for i in range(iteration)],
+            max_workers=max_workers,
+            file=tqdm_out,
+        )
         self._collate_error(tmp_dir)
         result = self._collate_result(
             func, tmp_dir, return_format, default_response
@@ -269,3 +271,21 @@ class ConcurrentExecutor:
         # self.dump(result, os.path.join(output_dir, 'result.json'))
         # shutil.rmtree(tmp_dir)
         return result
+
+
+class TqdmToLogger(io.StringIO):
+    """
+    Output stream for TQDM which will output to logger module instead of
+    the StdOut.
+    
+    https://github.com/tqdm/tqdm/issues/313#issuecomment-267959111
+    """
+    def __init__(self, logger: logging.Logger):
+        super().__init__()
+        self.logger = logger
+
+    def write(self, buf):
+        self.buf = buf.strip('\r\n\t ')
+
+    def flush(self):
+        self.logger.log(self.logger.level, self.buf)
