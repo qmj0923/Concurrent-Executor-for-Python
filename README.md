@@ -1,12 +1,13 @@
 # Concurrent Executor  
 
-Concurrently execute a function with a list of function inputs.
+- Concurrently execute a function with a list of function inputs.
+- A more powerful interface for [concurrent.futures.ProcessPoolExecutor.map](https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Executor.map).
 
 ## Features
 
-1. This framework can apply to any callable object.
-2. Checkpoints will be saved and loaded automatically.
-3. The real-time progress bar will be logged to `<output_dir>/_tmp/log_<i>.log`.
+1. Automatically save subprocess results to allow program resumption in case of interruption.
+2. Exceptions will be caught and logged automatically, freeing users from the burden of manually logging error messages.
+3. Log the real-time progress bar for each subprocess to `<output_dir>/_tmp/log_<i>.log`.
 
 ## Example
 
@@ -44,5 +45,5 @@ $ python test_standard.py
 
 If you're concerned about the size of `<output_dir>/_tmp/`, consider the following suggestions:
 
-Check if the return value of your function is too large. If so, consider storing it to a file instead, as demonstrated in `examples/crawl.py`.
-Check if the input to your function is too large. If so, consider storing the input to a file and passing the file path to your function instead.
+- Check if the return value of your function is too large. If so, consider storing it to a file instead, as demonstrated in `examples/crawl.py`.
+- Check if the input to your function is too large. If so, consider storing the input to a file and passing the file path to your function instead.

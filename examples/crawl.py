@@ -51,9 +51,7 @@ if __name__ == '__main__':
 
 
 '''
-# To concurrently crawl pages, an alternative way is to use
-# `tqdm.contrib.concurrent.process_map` as below.
-# Choose one implementation that suits your needs.
+# The code below is an alternative implementation of the above code.
 
 import os
 import requests

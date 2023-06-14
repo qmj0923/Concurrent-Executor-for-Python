@@ -5,7 +5,6 @@ https://github.com/qmj0923/Concurrent-Executor-for-Python
 '''
 
 from __future__ import annotations
-import collections
 import inspect
 import io
 import json
@@ -13,8 +12,10 @@ import logging
 import os
 import shutil
 
+from collections.abc import Sequence
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map as tqdm_map
+from typing import Callable, Optional
 
 
 class ConcurrentExecutor:
@@ -49,7 +50,7 @@ class ConcurrentExecutor:
     '''
 
     def __init__(
-        self, logger: logging.Logger = None,
+        self, logger: Optional[logging.Logger] = None,
         response_key='response', separator=' | '
     ):
         '''
@@ -83,21 +84,30 @@ class ConcurrentExecutor:
         with open(fname, 'w', encoding='utf-8') as f:
             return json.dump(obj, f, ensure_ascii=False, indent=2)
 
-    def encode_arguments(self, params: list) -> str:
-        return self.separator.join([str(param) for param in params])
+    def encode_arguments(self, arg_list: list) -> str:
+        '''
+        Encode the input arguments of the function to a string.
+        '''
+        return self.separator.join([str(arg) for arg in arg_list])
 
     def decode_arguments(self, key: str) -> list[str]:
+        '''
+        Decode the string to a list of input arguments of the function.
+
+        Mainly used for post-processing the return value of self.run()
+        when the `return_format` parameter is set to 'dict'.
+        '''
         return key.split(self.separator)
 
     def _convert_to_kwargs_data(
-        self, data: list, func: function
+        self, data: list, func: Callable
     ) -> list[dict]:
         if not data:
             return list()
         if isinstance(data[0], dict):
             # The elements in data are already in the form of kwargs.
             return data
-        if isinstance(data[0], collections.abc.Sequence):
+        if isinstance(data[0], Sequence):
             # The elements in data are in the form of args.
             sig = inspect.signature(func)
             # https://docs.python.org/3/library/inspect.html#inspect.BoundArguments
@@ -108,7 +118,7 @@ class ConcurrentExecutor:
         )
 
     def _worker(
-        self, kwargs_data: list[dict], func: function,
+        self, kwargs_data: list[dict], func: Callable,
         seq: int, output_dir: str
     ):
         part_fname = os.path.join(output_dir, f'part_{seq}.json')
@@ -133,7 +143,7 @@ class ConcurrentExecutor:
         return self._worker(**kwargs)
 
     def _collate_result(
-        self, func: function, tmp_dir: str,
+        self, func: Callable, tmp_dir: str,
         return_format: str, default_response
     ) -> list[dict] | dict | None:
         if return_format not in ['list', 'dict', 'none']:
@@ -186,7 +196,7 @@ class ConcurrentExecutor:
         return errors
 
     def run(
-        self, data: list, func: function, output_dir: str,
+        self, data: list, func: Callable, output_dir: str,
         return_format='list', default_response=None,
         batch_size=1000, max_workers=8
     ) -> list[dict] | dict | None:
@@ -228,6 +238,7 @@ class ConcurrentExecutor:
             ...
         ]
         ```
+
         If `return_format` == 'dict', the return value will be a dictionary
         whose keys are the arguments of `func` and whose values are the
         corresponding return values of `func`, as shown below.
@@ -253,6 +264,7 @@ class ConcurrentExecutor:
         self.logger.info('Start executing...')
 
         tqdm_out = TqdmToLogger(self.logger)
+        # Don't take lambda as the first argument.
         tqdm_map(
             self._work_wrapper,
             [{
