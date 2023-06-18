@@ -128,12 +128,12 @@ class ConcurrentExecutor:
             return
         result, errors = list(), list()
         with open(log_fname, 'w', encoding='utf-8') as f:
-            for kwargs in tqdm(kwargs_data, file=f):
+            for i, kwargs in enumerate(tqdm(kwargs_data, file=f)):
                 try:
                     response = func(**kwargs)
                 except Exception as e:
-                    response = None
-                    errors.append({'kwargs': kwargs, 'msg': str(e)})
+                    response = self.default_response
+                    errors.append({'id': i, 'kwargs': kwargs, 'msg': str(e)})
                 result.append({**kwargs, **{self.response_key: response}})
         self.dump(result, part_fname)
         if errors:
@@ -144,13 +144,10 @@ class ConcurrentExecutor:
 
     def _collate_result(
         self, func: Callable, tmp_dir: str,
-        return_format: str, default_response
+        return_format: str
     ) -> list[dict] | dict | None:
         if return_format not in ['list', 'dict', 'none']:
-            raise ValueError(
-                '[Concurrent Executor] '
-                'Invalid return_format.'
-            )
+            raise ValueError('[Concurrent Executor] Invalid return_format.')
         if return_format == 'none':
             return None
         segment_list = [
@@ -161,9 +158,6 @@ class ConcurrentExecutor:
         result = list()
         for fname in segment_list:
             result += self.load(fname)
-        for item in result:
-            if item[self.response_key] is None:
-                item[self.response_key] = default_response
 
         if return_format == 'list':
             pass
@@ -180,7 +174,7 @@ class ConcurrentExecutor:
             }
         return result
     
-    def _collate_error(self, tmp_dir: str) -> list[str]:
+    def _collate_error(self, tmp_dir: str, batch_size: int) -> list[str]:
         segment_list = [
             os.path.join(tmp_dir, path)
             for path in os.listdir(tmp_dir)
@@ -188,10 +182,15 @@ class ConcurrentExecutor:
         ]
         errors = list()
         for fname in segment_list:
-            errors += self.load(fname)
+            seq = int(fname.split('_')[-1].split('.')[0])
+            for e in self.load(fname):
+                e['id'] += seq * batch_size
+                errors.append(e)
         if errors:
             for e in errors:
-                self.logger.error(f'[{str(e["kwargs"])}] {str(e["msg"])}')
+                self.logger.error(
+                    f'[Index {e["id"]}, kwargs: {e["kwargs"]}] {e["msg"]}'
+                )
             self.dump(errors, os.path.join(tmp_dir, 'error.json'))
         return errors
 
@@ -212,9 +211,8 @@ class ConcurrentExecutor:
 
         return_format: the format of the return value
         
-        default_response: the default return value of `func`
-            If the return value of `func` is None, it will be set to
-            `default_response`.
+        default_response: the default return value of `func` when an error
+        occurs during its execution.
 
         batch_size: the number of `func`'s inputs to be processed by each
         worker at a time
@@ -252,6 +250,8 @@ class ConcurrentExecutor:
         kwargs_data = self._convert_to_kwargs_data(data, func)
         total_len = len(kwargs_data)
         iteration = (total_len + batch_size - 1) // batch_size
+
+        self.default_response = default_response
         tmp_dir = os.path.join(output_dir, '_tmp/')
         os.makedirs(tmp_dir, exist_ok=True)
 
@@ -276,10 +276,8 @@ class ConcurrentExecutor:
             max_workers=max_workers,
             file=tqdm_out,
         )
-        self._collate_error(tmp_dir)
-        result = self._collate_result(
-            func, tmp_dir, return_format, default_response
-        )
+        self._collate_error(tmp_dir, batch_size)
+        result = self._collate_result(func, tmp_dir, return_format)
         # self.dump(result, os.path.join(output_dir, 'result.json'))
         # shutil.rmtree(tmp_dir)
         return result
