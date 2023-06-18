@@ -45,8 +45,8 @@ if __name__ == '__main__':
         data=args_data,
         func=crawl_page,
         output_dir=root_dir,
-        return_format='none',
         batch_size=20,
+        do_return=False
     )
 
 

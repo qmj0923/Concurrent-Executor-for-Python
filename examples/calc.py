@@ -27,9 +27,4 @@ if __name__ == '__main__':
         data=kwargs_data,
         func=add,
         output_dir=root_dir,
-        return_format='dict',
     )
-
-    for k, v in result.items():
-        if v > 195:
-            logger.info(executor.decode_arguments(k))
