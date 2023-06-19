@@ -50,19 +50,8 @@ class ConcurrentExecutor:
     '''
 
     def __init__(
-        self, logger: Optional[logging.Logger] = None,
-        response_key='response', separator=' | '
+        self, logger: Optional[logging.Logger] = None
     ):
-        '''
-        Parameters
-        ----------
-        response_key: key of a dictionary that records the result of execution
-            Change if it confilcts with any parameter of the function that to
-            be executed. Otherwise the default value is recommended.
-
-        separator: string to join the input arguments of the function
-            Change if it confilcts with any possible argument.
-        '''
         # Since logging in a multiprocessing setup is not safe, using it in
         # self._worker() is not recommended. See the following link for more
         # details.
@@ -73,8 +62,7 @@ class ConcurrentExecutor:
             self.logger.addHandler(logging.StreamHandler())  # Write to stdout.
         else:
             self.logger = logger
-        self.response_key = response_key
-        self.separator = separator
+        self.response_key = '#response'
         
     def load(self, fname):
         with open(fname, 'r', encoding='utf-8') as f:
@@ -83,21 +71,6 @@ class ConcurrentExecutor:
     def dump(self, obj, fname):
         with open(fname, 'w', encoding='utf-8') as f:
             return json.dump(obj, f, ensure_ascii=False, indent=2)
-
-    def encode_arguments(self, arg_list: list) -> str:
-        '''
-        Encode the input arguments of the function to a string.
-        '''
-        return self.separator.join([str(arg) for arg in arg_list])
-
-    def decode_arguments(self, key: str) -> list[str]:
-        '''
-        Decode the string to a list of input arguments of the function.
-
-        Mainly used for post-processing the return value of self.run()
-        when the `return_format` parameter is set to 'dict'.
-        '''
-        return key.split(self.separator)
 
     def _convert_to_kwargs_data(
         self, data: list, func: Callable
@@ -128,12 +101,12 @@ class ConcurrentExecutor:
             return
         result, errors = list(), list()
         with open(log_fname, 'w', encoding='utf-8') as f:
-            for kwargs in tqdm(kwargs_data, file=f):
+            for i, kwargs in enumerate(tqdm(kwargs_data, file=f)):
                 try:
                     response = func(**kwargs)
                 except Exception as e:
-                    response = None
-                    errors.append({'kwargs': kwargs, 'msg': str(e)})
+                    response = self.default_response
+                    errors.append({'id': i, 'kwargs': kwargs, 'msg': str(e)})
                 result.append({**kwargs, **{self.response_key: response}})
         self.dump(result, part_fname)
         if errors:
@@ -142,64 +115,39 @@ class ConcurrentExecutor:
     def _work_wrapper(self, kwargs: dict):
         return self._worker(**kwargs)
 
-    def _collate_result(
-        self, func: Callable, tmp_dir: str,
-        return_format: str, default_response
-    ) -> list[dict] | dict | None:
-        if return_format not in ['list', 'dict', 'none']:
-            raise ValueError(
-                '[Concurrent Executor] '
-                'Invalid return_format.'
-            )
-        if return_format == 'none':
-            return None
+    def _collate_result(self, tmp_dir: str) -> list:
         segment_list = [
-            os.path.join(tmp_dir, path)
-            for path in os.listdir(tmp_dir)
+            os.path.join(tmp_dir, path) for path in os.listdir(tmp_dir)
             if path.startswith('part_') and path.endswith('.json')
         ]
         result = list()
         for fname in segment_list:
-            result += self.load(fname)
-        for item in result:
-            if item[self.response_key] is None:
-                item[self.response_key] = default_response
-
-        if return_format == 'list':
-            pass
-        if return_format == 'dict':
-            sig = inspect.signature(func)
-            # https://docs.python.org/3/library/inspect.html#inspect.Parameter
-            result = {
-                self.encode_arguments([
-                    str(info_dict[param])
-                    for param in sig.parameters.keys()
-                    if param in info_dict
-                ]): info_dict[self.response_key]
-                for info_dict in result
-            }
+            result += [item[self.response_key] for item in self.load(fname)]
         return result
     
-    def _collate_error(self, tmp_dir: str) -> list[str]:
+    def _collate_error(self, tmp_dir: str, batch_size: int) -> list[str]:
         segment_list = [
-            os.path.join(tmp_dir, path)
-            for path in os.listdir(tmp_dir)
+            os.path.join(tmp_dir, path) for path in os.listdir(tmp_dir)
             if path.startswith('error_') and path.endswith('.json')
         ]
         errors = list()
         for fname in segment_list:
-            errors += self.load(fname)
+            seq = int(fname.split('_')[-1].split('.')[0])
+            for e in self.load(fname):
+                e['id'] += seq * batch_size
+                errors.append(e)
         if errors:
             for e in errors:
-                self.logger.error(f'[{str(e["kwargs"])}] {str(e["msg"])}')
+                self.logger.error(
+                    f'[Index {e["id"]}, kwargs: {e["kwargs"]}] {e["msg"]}'
+                )
             self.dump(errors, os.path.join(tmp_dir, 'error.json'))
         return errors
 
     def run(
-        self, data: list, func: Callable, output_dir: str,
-        return_format='list', default_response=None,
-        batch_size=1000, max_workers=8
-    ) -> list[dict] | dict | None:
+        self, data: list, func: Callable, output_dir: str, max_workers=8,
+        batch_size=1000, default_response=None, do_return=True
+    ) -> list | None:
         '''
         Parameters
         ----------
@@ -209,49 +157,27 @@ class ConcurrentExecutor:
         argument lists or keyword argument lists
 
         output_dir: the directory to save files
-
-        return_format: the format of the return value
         
-        default_response: the default return value of `func`
-            If the return value of `func` is None, it will be set to
-            `default_response`.
+        max_workers: the maximum number of workers that can be used
 
         batch_size: the number of `func`'s inputs to be processed by each
         worker at a time
 
-        max_workers: the maximum number of workers that can be used
+        default_response: the default return value of `func` when an error
+        occurs during its execution.
+
+        do_return: whether to return the result of `func`'s execution
 
         Returns
         -------
-        Set `return_format` to 'none' if you don't want to return anything.
-        
-        If `return_format` == 'list', the return value will be a list of
-        dictionaries as follows.
-        ```
-        [
-            {
-                param1: arg1,
-                param2: arg2,
-                ...
-                self.response_key: func(arg1, arg2, ...),
-            },
-            ...
-        ]
-        ```
-
-        If `return_format` == 'dict', the return value will be a dictionary
-        whose keys are the arguments of `func` and whose values are the
-        corresponding return values of `func`, as shown below.
-        ```
-        {
-            arg1 + self.separator + arg2 + ...: func(arg1, arg2, ...),
-            ...
-        }
-        ```
+        A list containing the result of applying `func` to each element of
+        `data`, similar to the built-in `map` function.
         '''
         kwargs_data = self._convert_to_kwargs_data(data, func)
         total_len = len(kwargs_data)
         iteration = (total_len + batch_size - 1) // batch_size
+
+        self.default_response = default_response
         tmp_dir = os.path.join(output_dir, '_tmp/')
         os.makedirs(tmp_dir, exist_ok=True)
 
@@ -276,10 +202,11 @@ class ConcurrentExecutor:
             max_workers=max_workers,
             file=tqdm_out,
         )
-        self._collate_error(tmp_dir)
-        result = self._collate_result(
-            func, tmp_dir, return_format, default_response
-        )
+        self._collate_error(tmp_dir, batch_size)
+
+        if not do_return:
+            return
+        result = self._collate_result(tmp_dir)
         # self.dump(result, os.path.join(output_dir, 'result.json'))
         # shutil.rmtree(tmp_dir)
         return result
