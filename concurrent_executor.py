@@ -125,7 +125,7 @@ class ConcurrentExecutor:
             result += [item[self.response_key] for item in self.load(fname)]
         return result
     
-    def _collate_error(self, tmp_dir: str, batch_size: int) -> list[str]:
+    def _collate_error(self, tmp_dir: str, batch_size: int) -> list:
         segment_list = [
             os.path.join(tmp_dir, path) for path in os.listdir(tmp_dir)
             if path.startswith('error_') and path.endswith('.json')
@@ -189,7 +189,6 @@ class ConcurrentExecutor:
         self.logger.info(f'Temporary files will be saved in {tmp_dir}.')
         self.logger.info('Start executing...')
 
-        tqdm_out = TqdmToLogger(self.logger)
         # Don't take lambda as the first argument.
         tqdm_map(
             self._work_wrapper,
@@ -200,7 +199,7 @@ class ConcurrentExecutor:
                 'func': func, 'seq': i, 'output_dir': tmp_dir,
             } for i in range(iteration)],
             max_workers=max_workers,
-            file=tqdm_out,
+            file=TqdmToLogger(self.logger),
         )
         self._collate_error(tmp_dir, batch_size)
 
