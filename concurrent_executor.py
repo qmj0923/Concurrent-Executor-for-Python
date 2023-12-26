@@ -5,6 +5,7 @@ https://github.com/qmj0923/Concurrent-Executor-for-Python
 '''
 
 from __future__ import annotations
+import functools
 import inspect
 import io
 import json
@@ -63,14 +64,27 @@ class ConcurrentExecutor:
         else:
             self.logger = logger
         self.response_key = '#response'
-        
-    def load(self, fname):
+
+    @staticmethod
+    def load(fname):
         with open(fname, 'r', encoding='utf-8') as f:
             return json.load(f)
-    
-    def dump(self, obj, fname):
+
+    @staticmethod
+    def dump(obj, fname):
         with open(fname, 'w', encoding='utf-8') as f:
             return json.dump(obj, f, ensure_ascii=False, indent=2)
+
+    @staticmethod
+    def get_func_name(func: Callable) -> str:
+        if hasattr(func, '__name__'):
+            func_name = func.__name__
+        elif isinstance(func, functools.partial):
+            func_name = func.func.__name__
+        else:
+            func_name = str(func)
+            # func_name = '<unknown function>'
+        return func_name
 
     def _convert_to_kwargs_data(
         self, data: list, func: Callable
@@ -124,7 +138,7 @@ class ConcurrentExecutor:
         for fname in segment_list:
             result += [item[self.response_key] for item in self.load(fname)]
         return result
-    
+
     def _collate_error(self, tmp_dir: str, batch_size: int) -> list:
         segment_list = [
             os.path.join(tmp_dir, path) for path in os.listdir(tmp_dir)
@@ -181,7 +195,10 @@ class ConcurrentExecutor:
         tmp_dir = os.path.join(output_dir, '_tmp/')
         os.makedirs(tmp_dir, exist_ok=True)
 
-        self.logger.info(f'Executing "{func.__name__}" for {total_len} data.')
+        self.logger.info(
+            f'Executing "{self.get_func_name(func)}"'
+            f' for {total_len} data.'
+        )
         self.logger.info(
             f'Data will be divided into {iteration} parts, with a maximum '
             f'of {batch_size} item(s) in each part.'
@@ -200,6 +217,7 @@ class ConcurrentExecutor:
             } for i in range(iteration)],
             max_workers=max_workers,
             file=TqdmToLogger(self.logger),
+            chunksize=1,
         )
         self._collate_error(tmp_dir, batch_size)
 
