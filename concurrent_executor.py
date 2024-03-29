@@ -130,20 +130,20 @@ class ConcurrentExecutor:
         return self._worker(**kwargs)
 
     def _collate_result(self, tmp_dir: str) -> list:
-        segment_list = [
+        segment_list = sorted([
             os.path.join(tmp_dir, path) for path in os.listdir(tmp_dir)
             if path.startswith('part_') and path.endswith('.json')
-        ]
+        ], key=lambda x: int(x.split('_')[-1].split('.')[0]))
         result = list()
         for fname in segment_list:
             result += [item[self.response_key] for item in self.load(fname)]
         return result
 
     def _collate_error(self, tmp_dir: str, batch_size: int) -> list:
-        segment_list = [
+        segment_list = sorted([
             os.path.join(tmp_dir, path) for path in os.listdir(tmp_dir)
             if path.startswith('error_') and path.endswith('.json')
-        ]
+        ], key=lambda x: int(x.split('_')[-1].split('.')[0]))
         errors = list()
         for fname in segment_list:
             seq = int(fname.split('_')[-1].split('.')[0])
